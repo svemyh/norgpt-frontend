@@ -7,7 +7,7 @@ import { PromptInputBox } from "@/components/ui/ai-prompt-box"
 import { MessageLoading } from "@/components/ui/message-loading"
 import { useAnimatedText } from "@/components/ui/animated-text"
 // Ensure all necessary icons are imported, including those for the sidebar
-import { Copy, Check, User, ChevronsUpDown, Calendar, Home as HomeIcon, Inbox, Search, Settings } from "lucide-react"
+import { Copy, Check, User, ChevronsUpDown, Calendar, Home as HomeIcon, Inbox, Search, Settings, MessageSquareText, FileText, HelpCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TooltipProvider } from "@/components/ui/tooltip" // Ensure this path is correct
 
@@ -40,14 +40,46 @@ function AnimatedMessage({ content, isAnimating }: { content: string; isAnimatin
   return <div className="whitespace-pre-wrap">{isAnimating ? animatedText : content}</div>
 }
 
-// Example sidebar menu items
-const sidebarMenuItems = [
-  { title: "Home", url: "#", icon: HomeIcon },
-  { title: "Inbox", url: "#", icon: Inbox },
-  { title: "Calendar", url: "#", icon: Calendar },
-  { title: "Search", url: "#", icon: Search },
-  { title: "Settings", url: "#", icon: Settings },
-]
+// Example sidebar menu items - "Ny chat" will be separate, "Innstillinger" moved to footer
+const sidebarMenuItems = []
+
+const footerMenuItems = [
+  { title: "Innstillinger", url: "#", icon: Settings },
+  { title: "Vilkår", url: "#", icon: FileText },
+  { title: "Hjelp", url: "#", icon: HelpCircle },
+];
+
+// Example chat history data
+const chatHistory = [
+  {
+    label: "I dag",
+    chats: [
+      { title: "Hjelp med programmering", url: "#" },
+      { title: "Skriv en e-post", url: "#" },
+    ],
+  },
+  {
+    label: "I går",
+    chats: [
+      { title: "Oversett tekst", url: "#" },
+      { title: "Lag en oppskrift", url: "#" },
+    ],
+  },
+  {
+    label: "Forrige uke",
+    chats: [
+      { title: "Hjelp med matematikk", url: "#" },
+      { title: "Planlegg en reise", url: "#" },
+    ],
+  },
+  {
+    label: "Forrige måned",
+    chats: [
+      { title: "Skriv en historie", url: "#" },
+      { title: "Lag en presentasjon", url: "#" },
+    ],
+  },
+];
 
 // Define sidebar width constants, matching those in sidebar.tsx
 const SIDEBAR_WIDTH_DESKTOP_EXPANDED = "16rem";
@@ -92,6 +124,22 @@ const AdjustableFixedContainer: React.FC<AdjustableFixedContainerProps> = ({
       style={style}
     >
       {children} {/* Inner content (e.g., max-w-3xl mx-auto) will center within this adjusted space */}
+    </div>
+  );
+};
+
+// New MobileTopBar component
+const MobileTopBar: React.FC = () => {
+  const { isMobile } = useSidebar();
+
+  if (!isMobile) {
+    return null; // Don't render on desktop
+  }
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:hidden">
+      <SidebarTrigger />
+      <h1 className="text-lg font-semibold">NorGPT</h1>
     </div>
   );
 };
@@ -143,33 +191,57 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
     <TooltipProvider>
       <SidebarProvider defaultOpen={true}> {/* SidebarProvider wraps everything */}
         <Sidebar> {/* The actual Sidebar component */}
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Application</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {sidebarMenuItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild tooltip={item.title}>
-                        <a href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+          <SidebarContent> {/* Removed className="flex flex-col" */}
+            {/* Standalone "Ny chat" button at the top */}
+            {/* For mobile, this div will be the first child picked up by SheetContent */}
+            {/* For desktop, it's just the first item in the sidebar flow */}
+            <div className="md:p-2"> {/* Removed p-2 for mobile, keep for desktop. Mobile header in sidebar.tsx has p-2 */}
+              <SidebarMenuButton asChild tooltip="Ny chat" className="h-12 md:w-full text-base font-medium" size="lg"> {/* md:w-full so it's auto-width on mobile */}
+                <a href="#"><span className="flex items-center gap-2"><MessageSquareText /><span>Ny chat</span></span></a>
+              </SidebarMenuButton>
+            </div>
+
+            {/* Chat History Sections - takes remaining flexible space */}
+            {/* On mobile, this div starts from the second child picked by SheetContent */}
+            {/* On desktop, it flows after the Ny Chat button */}
+            <div className="flex-grow overflow-y-auto">
+              {chatHistory.map((group) => (
+                <SidebarGroup key={group.label}>
+                  <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {group.chats.map((chat) => (
+                        <SidebarMenuItem key={chat.title}>
+                          <SidebarMenuButton asChild tooltip={chat.title} className="text-sm font-normal">
+                            <a href={chat.url}><span>{chat.title}</span></a>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
+            </div>
           </SidebarContent>
           <SidebarFooter>
+            <SidebarGroup>
+              <SidebarMenu>
+                {footerMenuItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild tooltip={item.title}>
+                      <a href={item.url}><span className="flex items-center gap-2"><item.icon /><span>{item.title}</span></span></a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
             <SidebarGroup>
               <SidebarMenuButton className="w-full justify-between gap-3 h-12">
                 <div className="flex items-center gap-2">
                   <User className="h-5 w-5 rounded-md" />
                   <div className="flex flex-col items-start">
-                    <span className="text-sm font-medium">John Doe</span>
-                    <span className="text-xs text-muted-foreground">john@example.com</span>
+                    <span className="text-sm font-medium">Ola Nordmann</span>
+                    <span className="text-xs text-muted-foreground">ola@example.com</span>
                   </div>
                 </div>
                 <ChevronsUpDown className="h-5 w-5 rounded-md" />
@@ -179,16 +251,17 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
         </Sidebar>
 
         <SidebarInset> {/* SidebarInset wraps your main page content */}
+          <MobileTopBar /> {/* Add the mobile top bar here */}
           <div className="w-full min-h-screen bg-background">
-            {/* Sidebar Trigger - Positioned absolutely within SidebarInset */}
-            <div className="absolute top-4 left-4 z-30"> {/* Adjust as needed */}
+            {/* Sidebar Trigger - Positioned absolutely within SidebarInset - hide on mobile */}
+            <div className="absolute top-4 left-4 z-30 hidden md:block"> {/* Adjust as needed, hide on mobile */}
               <SidebarTrigger />
             </div>
 
             {/* Main content area */}
-            <div className="flex-1 flex flex-col h-screen pb-36">
+            <div className="flex-1 flex flex-col h-screen pb-36 pt-16 md:pt-0"> {/* Changed pt-14 to pt-16 for mobile */}
               {/* Messages area */}
-              <div className="flex-1 overflow-y-auto w-full pt-12"> {/* Added pt-12 to avoid overlap with trigger */}
+              <div className="flex-1 overflow-y-auto w-full pt-4 md:pt-12"> {/* Adjusted pt-12 for mobile, existing pt-12 for desktop was fine for content start below trigger */}
                 {!hasMessages ? (
                   <div className="flex items-center justify-center h-full w-full">
                     <div className="text-center max-w-xl mx-auto">

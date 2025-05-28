@@ -6,9 +6,9 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ChatGPT Clone",
-  description: "A modern ChatGPT clone with sleek UI",
-    generator: 'v0.dev'
+  title: "NorGPT",
+  description: "Norsk AI-assistent. Sikker, gratis, personvernbevarende.",
+    generator: 'NorGPT'
 }
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="no">
       <body className={inter.className}>{children}</body>
     </html>
   )

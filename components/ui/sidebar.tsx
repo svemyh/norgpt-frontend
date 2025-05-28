@@ -3,7 +3,9 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
-import { PanelLeft } from "lucide-react"
+import { PanelLeft, X } from "lucide-react"
+import { DialogTitle } from "@radix-ui/react-dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 import { useIsMobile } from "@/components/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -202,7 +204,31 @@ const Sidebar = React.forwardRef<
             } as React.CSSProperties}
             side={side}
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <VisuallyHidden>
+              <DialogTitle>Sidebar Navigation</DialogTitle>
+            </VisuallyHidden>
+            <div className="flex h-full w-full flex-col">
+              {/* Mobile header: X button and potentially the Ny Chat button (as first child) */}
+              <div className="flex items-center justify-between p-2 md:hidden">
+                {/* This will render the first child from SidebarContent, which is the Ny Chat button div */}
+                {React.Children.toArray(children)[0]}
+                <button
+                  onClick={() => setOpenMobile(false)}
+                  className="rounded-md p-2 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:outline-none focus:ring-0 focus:ring-offset-0"
+                  aria-label="Close sidebar"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              {/* Render the rest of the children (chat history, etc.) */}
+              <div className="flex-grow overflow-y-auto md:hidden">
+                {React.Children.toArray(children).slice(1)}
+              </div>
+              {/* For desktop, render all children normally */}
+              <div className="hidden h-full flex-col md:flex">
+                {children}
+              </div>
+            </div>
           </SheetContent>
         </Sheet>
       )
@@ -401,6 +427,8 @@ const SidebarContent = React.forwardRef<
       data-sidebar="content"
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // Remove the flex-col from SidebarContent in app/page.tsx if it was added for this, or ensure it works with this structure
+        // The parent div in SheetContent is already flex-col
         className
       )}
       {...props}
@@ -545,6 +573,7 @@ const SidebarMenuButton = React.forwardRef<
       size = "default",
       tooltip,
       className,
+      children, // Capture children here
       ...props
     },
     ref
@@ -552,7 +581,8 @@ const SidebarMenuButton = React.forwardRef<
     const Comp = asChild ? Slot : "button"
     const { isMobile, state } = useSidebar()
 
-    const button = (
+    // Element that will be rendered, either <button> or <Slot>
+    const renderableElement = (
       <Comp
         ref={ref}
         data-sidebar="menu-button"
@@ -560,27 +590,37 @@ const SidebarMenuButton = React.forwardRef<
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
         {...props}
-      />
+      >
+        {/* Ensure we're only passing a single child to avoid React.Children.only error */}
+        {React.Children.count(children) > 1 ? (
+          <div className="flex items-center gap-2">
+            {children}
+          </div>
+        ) : (
+          children
+        )}
+      </Comp>
     )
 
     if (!tooltip) {
-      return button
+      return renderableElement
     }
 
-    if (typeof tooltip === "string") {
-      tooltip = {
-        children: tooltip,
-      }
-    }
-
+    // If there's a tooltip, TooltipTrigger needs to wrap the clickable element.
+    // TooltipTrigger itself should use asChild if the renderableElement is a custom component (like Slot)
+    // or if we want it to merge with a standard HTML element.
     return (
       <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        {/* Force asChild={true} for TooltipTrigger to avoid React.Children.only errors */}
+        <TooltipTrigger asChild>
+          {/* Ensure renderableElement is always a single element */}
+          {renderableElement}
+        </TooltipTrigger>
         <TooltipContent
           side="right"
           align="center"
           hidden={state !== "collapsed" || isMobile}
-          {...tooltip}
+          {...(typeof tooltip === 'string' ? { children: tooltip } : tooltip)}
         />
       </Tooltip>
     )
