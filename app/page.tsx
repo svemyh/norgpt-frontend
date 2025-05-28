@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { PromptInputBox } from "@/components/ui/ai-prompt-box"
 import { MessageLoading } from "@/components/ui/message-loading"
 import { useAnimatedText } from "@/components/ui/animated-text"
@@ -48,6 +48,72 @@ function AnimatedMessage({ content, isAnimating }: { content: string; isAnimatin
   const animatedText = useAnimatedText(isAnimating ? content : "", "")
   return <div className="whitespace-pre-wrap">{isAnimating ? animatedText : content}</div>
 }
+
+// Custom animation hook for fade-in effect
+function useFadeIn(delay = 0) {
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => setIsMounted(true), delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
+  
+  return {
+    opacity: isMounted ? 1 : 0,
+    transition: `opacity 0.5s ease-in-out ${delay}ms`
+  };
+}
+
+// Custom hook for managing model selection with visual feedback
+function useModelSelection(initialModel = "standard") {
+  const [selectedModel, setSelectedModelState] = useState<string>(initialModel);
+  const [selectedModelName, setSelectedModelName] = useState<string>("");
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Handle model selection with visual feedback
+  const setSelectedModel = (modelId: string, modelName: string) => {
+    setSelectedModelState(modelId);
+    setSelectedModelName(modelName);
+    setShowFeedback(true);
+    
+    // Keep dropdown open briefly to provide visual feedback
+    setTimeout(() => {
+      setIsOpen(false); // Close the dropdown after delay
+      
+      // Reset feedback after another delay
+      setTimeout(() => {
+        setShowFeedback(false);
+      }, 1000);
+    }, 600);
+  };
+  
+  return {
+    selectedModel,
+    selectedModelName,
+    showFeedback,
+    isOpen,
+    setIsOpen,
+    setSelectedModel
+  };
+}
+
+// Create a model context to share state between desktop and mobile model selectors
+const ModelContext = React.createContext<{
+  selectedModel: string;
+  selectedModelName: string;
+  showFeedback: boolean;
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+  setSelectedModel: (modelId: string, modelName: string) => void;
+}>({ 
+  selectedModel: "standard", 
+  selectedModelName: "",
+  showFeedback: false,
+  isOpen: false,
+  setIsOpen: () => {},
+  setSelectedModel: () => {} 
+});
 
 // Example sidebar menu items - "Ny chat" will be separate, "Innstillinger" moved to footer
 const sidebarMenuItems = []
@@ -141,6 +207,7 @@ const AdjustableFixedContainer: React.FC<AdjustableFixedContainerProps> = ({
         className
       )}
       style={style}
+      suppressHydrationWarning
     >
       {children} {/* Inner content (e.g., max-w-3xl mx-auto) will center within this adjusted space */}
     </div>
@@ -150,24 +217,15 @@ const AdjustableFixedContainer: React.FC<AdjustableFixedContainerProps> = ({
 // New MobileTopBar component
 const MobileTopBar: React.FC = () => {
   const { isMobile } = useSidebar();
-
-  if (!isMobile) {
-    return null; // Don't render on desktop
-  }
-
-  return (
-    <div className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:hidden">
-      <SidebarTrigger />
-      <h1 className="text-3xl font-semibold">NorGPT</h1>
-    </div>
-  );
-};
-
-// Sidebar Controls component - Client-only with useEffect to prevent hydration mismatches
-const SidebarControls: React.FC = () => {
-  const { state } = useSidebar();
-  // State for tracking the selected model
-  const [selectedModel, setSelectedModel] = useState<string>("standard");
+  const fadeStyle = useFadeIn(300);
+  const { 
+    selectedModel, 
+    selectedModelName,
+    showFeedback,
+    isOpen, 
+    setIsOpen,
+    setSelectedModel 
+  } = React.useContext(ModelContext);
   // State to prevent hydration mismatch
   const [mounted, setMounted] = useState(false);
   
@@ -176,7 +234,101 @@ const SidebarControls: React.FC = () => {
     setMounted(true);
   }, []);
   
-  // Models available for selection
+  // Models available for selection - shared constants
+  const models = [
+    { id: "rask", name: "NorGPT: rask" },
+    { id: "standard", name: "NorGPT: standard" },
+    { id: "tenkende", name: "NorGPT: tenkende" },
+  ];
+
+  if (!isMobile || !mounted) {
+    return null; // Don't render on desktop or during SSR
+  }
+
+  return (
+    <div 
+      className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between bg-background/80 px-4 backdrop-blur-sm md:hidden"
+      style={{
+        ...fadeStyle,
+        // Remove border when selected/highlighted (transparent border color)
+        outlineColor: 'transparent',
+        borderBottom: '1px solid transparent',
+        boxShadow: 'none'
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <SidebarTrigger />
+      </div>
+      
+      {/* Model Selection Dropdown - simplified for mobile with visual feedback */}
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-10 px-2 gap-1">
+            <ChevronDown className="h-4 w-4 mr-1" />
+            <span className="text-2xl font-semibold">NorGPT</span>
+            {showFeedback && (
+              <span 
+                className="ml-2 text-xs bg-primary/10 text-primary rounded-full px-2 py-1 transition-opacity"
+                style={{ opacity: showFeedback ? 1 : 0, transition: 'opacity 300ms ease-out' }}
+              >
+                {selectedModelName.split(': ')[1]}
+              </span>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent 
+          align="end"
+          className="transition-opacity duration-300"
+          style={{ opacity: isOpen ? 1 : 0 }}
+        >
+          {models.map(model => (
+            <DropdownMenuItem 
+              key={model.id} 
+              className={cn(
+                "text-base transition-colors duration-200",
+                model.id === selectedModel && "bg-primary/10"
+              )}
+              onClick={() => setSelectedModel(model.id, model.name)}
+            >
+              <span className="flex items-center">
+                <span className={cn(
+                  "w-4 h-4 mr-2 flex-shrink-0",
+                  model.id === selectedModel ? "opacity-100" : "opacity-0"
+                )}>
+                  {model.id === selectedModel && <Check className="h-4 w-4" />}
+                </span>
+                {model.name}
+              </span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+};
+
+// Sidebar Controls component - Client-only with useEffect to prevent hydration mismatches
+const SidebarControls: React.FC = () => {
+  const { state } = useSidebar();
+  // State for tracking the selected model - from context
+  const { 
+    selectedModel, 
+    selectedModelName, 
+    showFeedback, 
+    isOpen, 
+    setIsOpen, 
+    setSelectedModel 
+  } = React.useContext(ModelContext);
+  // State to prevent hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  const fadeStyle = useFadeIn(600); // Slightly delayed fade in
+  
+  // Use effect to mark component as mounted after hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // Models available for selection - shared constants
   const models = [
     { id: "rask", name: "NorGPT: rask" },
     { id: "standard", name: "NorGPT: standard" },
@@ -192,7 +344,16 @@ const SidebarControls: React.FC = () => {
   }
   
   return (
-    <div className="absolute top-4 left-4 z-30 hidden md:flex items-center gap-2"> {/* Adjust as needed, hide on mobile */}
+    <div 
+      className="absolute top-4 left-4 z-30 hidden md:flex items-center gap-2"
+      style={{
+        ...fadeStyle,
+        // Remove border when selected/highlighted
+        outlineColor: 'transparent',
+        borderColor: 'transparent',
+        boxShadow: 'none'
+      }}
+    > {/* Adjust as needed, hide on mobile */}
       <SidebarTrigger />
       
       {/* New Chat Button - Only visible when sidebar is collapsed */}
@@ -200,7 +361,13 @@ const SidebarControls: React.FC = () => {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => window.location.href="/"}>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-10 w-10" 
+                onClick={() => window.location.href="/"}
+                style={fadeStyle}
+              >
                 <MessageSquareText className="h-6 w-6" />
                 <span className="sr-only">Ny chat</span>
               </Button>
@@ -212,22 +379,44 @@ const SidebarControls: React.FC = () => {
         </TooltipProvider>
       )}
       
-      {/* Model Selection Dropdown - direct selection without tooltip */}
-      <DropdownMenu>
+      {/* Model Selection Dropdown - with visual feedback */}
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-10 gap-1 px-3">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className={cn(
+              "h-10 gap-1 px-3 transition-colors", 
+              showFeedback && "bg-primary/10"
+            )}
+          >
             <span className="text-base font-medium">{currentModel}</span>
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent 
+          align="end"
+          className="transition-opacity duration-300"
+          style={{ opacity: isOpen ? 1 : 0 }}
+        >
           {models.map(model => (
             <DropdownMenuItem 
               key={model.id} 
-              className="text-base"
-              onClick={() => setSelectedModel(model.id)}
+              className={cn(
+                "text-base transition-colors duration-200",
+                model.id === selectedModel && "bg-primary/10"
+              )}
+              onClick={() => setSelectedModel(model.id, model.name)}
             >
-              <span>{model.name}</span>
+              <span className="flex items-center">
+                <span className={cn(
+                  "w-4 h-4 mr-2 flex-shrink-0",
+                  model.id === selectedModel ? "opacity-100" : "opacity-0"
+                )}>
+                  {model.id === selectedModel && <Check className="h-4 w-4" />}
+                </span>
+                {model.name}
+              </span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
@@ -240,7 +429,19 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [sidebarMounted, setSidebarMounted] = useState(false)
+  const modelSelection = useModelSelection("standard")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  // Pre-calculate fade styles at component level to avoid conditional hook calls
+  const nyChatFadeStyle = useFadeIn(400)
+  
+  // Use effect to handle animations after component mounts
+  useEffect(() => {
+    setMounted(true);
+    setSidebarMounted(true);
+  }, [])
   // We'll use this for the sidebar controls
 
   const hasMessages = messages.length > 0
@@ -333,14 +534,16 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
   const lastAssistantMessage = messages.filter((m) => m.role === "assistant").pop()
 
   return (
+    <ModelContext.Provider value={modelSelection}>
     <TooltipProvider>
-      <SidebarProvider> {/* SidebarProvider wraps everything, uses cookie-based state */}
+      {sidebarMounted ? (
+        <SidebarProvider defaultOpen={false}> {/* SidebarProvider with defaultOpen=false for new users */}
         <Sidebar> {/* The actual Sidebar component */}
           <SidebarContent> {/* Removed className="flex flex-col" */}
             {/* Standalone "Ny chat" button at the top */}
             {/* For mobile, this div will be the first child picked up by SheetContent */}
             {/* For desktop, it's just the first item in the sidebar flow */}
-            <div className="md:p-2"> {/* Removed p-2 for mobile, keep for desktop. Mobile header in sidebar.tsx has p-2 */}
+            <div className="md:p-2" style={nyChatFadeStyle}> {/* Removed p-2 for mobile, keep for desktop. Mobile header in sidebar.tsx has p-2 */}
               <SidebarMenuButton asChild tooltip="Ny chat" className="md:w-full text-sm font-bold"> {/* md:w-full so it's auto-width on mobile */}
                 <a href="/"><span className="flex items-center gap-2"><MessageSquareText /><span>Ny chat</span></span></a>
               </SidebarMenuButton>
@@ -409,7 +612,15 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
                 {!hasMessages ? (
                   <div className="flex items-center justify-center h-full w-full">
                     <div className="text-center max-w-xl mx-auto">
-                      <h1 className="text-3xl font-semibold">Hva kan jeg hjelpe med i dag?</h1>
+                      <div className="transform transition-all duration-700 ease-out" 
+                         style={{
+                           opacity: mounted ? 1 : 0,
+                           transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+                           transition: 'opacity 0.7s ease-out, transform 0.7s ease-out'
+                         }}
+                      >
+                        <h1 className="text-3xl font-semibold">Hva kan jeg hjelpe med i dag?</h1>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -484,6 +695,13 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
           </div>
         </SidebarInset>
       </SidebarProvider>
+      ) : (
+        <div className="fixed inset-0 bg-background flex items-center justify-center">
+          {/* Simple loading state while we wait for client-side render */}
+          <div className="animate-pulse">Loading...</div>
+        </div>
+      )}
     </TooltipProvider>
+    </ModelContext.Provider>
   )
 }

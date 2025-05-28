@@ -99,3 +99,14 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background-color: #9ca3af;
 }
+
+/* Custom text selection color */
+::selection {
+  background-color: #1a0063;
+  color: white;
+}
+
+::-moz-selection {
+  background-color: #1a0063;
+  color: white;
+}
