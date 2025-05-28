@@ -7,9 +7,16 @@ import { PromptInputBox } from "@/components/ui/ai-prompt-box"
 import { MessageLoading } from "@/components/ui/message-loading"
 import { useAnimatedText } from "@/components/ui/animated-text"
 // Ensure all necessary icons are imported, including those for the sidebar
-import { Copy, Check, User, ChevronsUpDown, Calendar, Home as HomeIcon, Inbox, Search, Settings, MessageSquareText, FileText, HelpCircle } from "lucide-react"
+import { Copy, Check, User, ChevronsUpDown, Calendar, Home as HomeIcon, Inbox, Search, Settings, MessageSquareText, FileText, HelpCircle, Plus, ChevronDown } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { TooltipProvider } from "@/components/ui/tooltip" // Ensure this path is correct
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip" // Ensure this path is correct
 
 // Import all necessary Sidebar components and the useSidebar hook
 import {
@@ -25,6 +32,7 @@ import {
   SidebarFooter,
   SidebarTrigger,
   SidebarInset,
+  SidebarSeparator,
   useSidebar, // Import useSidebar hook
 } from "@/components/ui/sidebar" // Ensure this path is correct and sidebar.tsx is in components/ui
 
@@ -77,6 +85,16 @@ const chatHistory = [
     chats: [
       { title: "Skriv en historie", url: "#" },
       { title: "Lag en presentasjon", url: "#" },
+      { title: "Sammendrag av artikkel", url: "#" },
+      { title: "Hjelp med CV", url: "#" },
+      { title: "Oversett dokumenter", url: "#" },
+      { title: "Budsjettplanlegging", url: "#" },
+      { title: "SEO-optimalisering", url: "#" },
+      { title: "Markedsføringsplan", url: "#" },
+      { title: "Prosjektledelse tips", url: "#" },
+      { title: "Treningsprogram", url: "#" },
+      { title: "Matlaging og oppskrifter", url: "#" },
+      { title: "Ferieplanlegging", url: "#" },
     ],
   },
 ];
@@ -139,7 +157,68 @@ const MobileTopBar: React.FC = () => {
   return (
     <div className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-sm md:hidden">
       <SidebarTrigger />
-      <h1 className="text-lg font-semibold">NorGPT</h1>
+      <h1 className="text-3xl font-semibold">NorGPT</h1>
+    </div>
+  );
+};
+
+// Sidebar Controls component - Only rendered after SidebarProvider is mounted
+const SidebarControls: React.FC = () => {
+  const { state } = useSidebar();
+  // State for tracking the selected model
+  const [selectedModel, setSelectedModel] = useState<string>("standard");
+  
+  // Models available for selection
+  const models = [
+    { id: "rask", name: "NorGPT: rask" },
+    { id: "standard", name: "NorGPT: standard" },
+    { id: "tenkende", name: "NorGPT: tenkende" },
+  ];
+  
+  // Get the current model name for display
+  const currentModel = models.find(model => model.id === selectedModel)?.name || models[1].name;
+  
+  return (
+    <div className="absolute top-4 left-4 z-30 hidden md:flex items-center gap-2"> {/* Adjust as needed, hide on mobile */}
+      <SidebarTrigger />
+      
+      {/* New Chat Button - Only visible when sidebar is collapsed */}
+      {state === "collapsed" && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => window.location.href="#"}>
+                <MessageSquareText className="h-6 w-6" />
+                <span className="sr-only">Ny chat</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Ny chat</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      
+      {/* Model Selection Dropdown - direct selection without tooltip */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-10 gap-1 px-3">
+            <span className="text-base font-medium">{currentModel}</span>
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {models.map(model => (
+            <DropdownMenuItem 
+              key={model.id} 
+              className="text-base"
+              onClick={() => setSelectedModel(model.id)}
+            >
+              <span>{model.name}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 };
@@ -149,6 +228,7 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
   const [loading, setLoading] = useState(false)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // We'll use this for the sidebar controls
 
   const hasMessages = messages.length > 0
 
@@ -189,14 +269,14 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
 
   return (
     <TooltipProvider>
-      <SidebarProvider defaultOpen={true}> {/* SidebarProvider wraps everything */}
+      <SidebarProvider> {/* SidebarProvider wraps everything, uses cookie-based state */}
         <Sidebar> {/* The actual Sidebar component */}
           <SidebarContent> {/* Removed className="flex flex-col" */}
             {/* Standalone "Ny chat" button at the top */}
             {/* For mobile, this div will be the first child picked up by SheetContent */}
             {/* For desktop, it's just the first item in the sidebar flow */}
             <div className="md:p-2"> {/* Removed p-2 for mobile, keep for desktop. Mobile header in sidebar.tsx has p-2 */}
-              <SidebarMenuButton asChild tooltip="Ny chat" className="h-12 md:w-full text-base font-medium" size="lg"> {/* md:w-full so it's auto-width on mobile */}
+              <SidebarMenuButton asChild tooltip="Ny chat" className="md:w-full text-sm font-bold"> {/* md:w-full so it's auto-width on mobile */}
                 <a href="#"><span className="flex items-center gap-2"><MessageSquareText /><span>Ny chat</span></span></a>
               </SidebarMenuButton>
             </div>
@@ -224,6 +304,7 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
             </div>
           </SidebarContent>
           <SidebarFooter>
+            <SidebarSeparator />
             <SidebarGroup>
               <SidebarMenu>
                 {footerMenuItems.map((item) => (
@@ -253,10 +334,8 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
         <SidebarInset> {/* SidebarInset wraps your main page content */}
           <MobileTopBar /> {/* Add the mobile top bar here */}
           <div className="w-full min-h-screen bg-background">
-            {/* Sidebar Trigger - Positioned absolutely within SidebarInset - hide on mobile */}
-            <div className="absolute top-4 left-4 z-30 hidden md:block"> {/* Adjust as needed, hide on mobile */}
-              <SidebarTrigger />
-            </div>
+            {/* Sidebar Controls component will be rendered here, where the SidebarProvider context is available */}
+            <SidebarControls />
 
             {/* Main content area */}
             <div className="flex-1 flex flex-col h-screen pb-36 pt-16 md:pt-0"> {/* Changed pt-14 to pt-16 for mobile */}
