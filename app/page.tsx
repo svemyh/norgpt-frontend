@@ -41,6 +41,7 @@ interface Message {
   role: "user" | "assistant"
   content: string
   isAnimating?: boolean
+  isError?: boolean
 }
 
 function AnimatedMessage({ content, isAnimating }: { content: string; isAnimating: boolean }) {
@@ -162,11 +163,18 @@ const MobileTopBar: React.FC = () => {
   );
 };
 
-// Sidebar Controls component - Only rendered after SidebarProvider is mounted
+// Sidebar Controls component - Client-only with useEffect to prevent hydration mismatches
 const SidebarControls: React.FC = () => {
   const { state } = useSidebar();
   // State for tracking the selected model
   const [selectedModel, setSelectedModel] = useState<string>("standard");
+  // State to prevent hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  
+  // Use effect to mark component as mounted after hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Models available for selection
   const models = [
@@ -178,6 +186,11 @@ const SidebarControls: React.FC = () => {
   // Get the current model name for display
   const currentModel = models.find(model => model.id === selectedModel)?.name || models[1].name;
   
+  // Don't render anything during server-side rendering or initial hydration
+  if (!mounted) {
+    return null;
+  }
+  
   return (
     <div className="absolute top-4 left-4 z-30 hidden md:flex items-center gap-2"> {/* Adjust as needed, hide on mobile */}
       <SidebarTrigger />
@@ -187,7 +200,7 @@ const SidebarControls: React.FC = () => {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => window.location.href="#"}>
+              <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => window.location.href="/"}>
                 <MessageSquareText className="h-6 w-6" />
                 <span className="sr-only">Ny chat</span>
               </Button>
@@ -234,9 +247,55 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
 
   const simulateResponse = async (message: string) => {
     setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setLoading(false)
-    return "Hello! I'm your AI assistant. How can I help you today?\n\nI can assist you with a wide variety of tasks including:\n\n• Answering questions\n• Writing and editing\n• Problem solving\n• Creative projects\n• Research and analysis\n\nFeel free to ask me anything!"
+    
+    try {
+      // Build chat history for context
+      const historyMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add the new message
+      const apiMessages = [
+        ...historyMessages,
+        { role: 'user', content: message }
+      ];
+      
+      // Call our API endpoint
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+      
+      const data = await response.json();
+      
+      // Check if the response contains an error
+      if (!response.ok || data.error) {
+        // Simple info logging instead of error
+        console.log('API issue:', data.error || response.statusText);
+        return {
+          content: 'Beklager, det oppstod en feil under kommunikasjon med AI-tjenesten. Vennligst prøv igjen senere.',
+          isError: true
+        };
+      }
+      
+      return {
+        content: data.choices[0].message.content,
+        isError: false
+      };
+    } catch (error) {
+      // Simple info logging instead of error
+      console.log('API call issue:', error);
+      return {
+        content: 'Beklager, det oppstod en feil under kommunikasjon med AI-tjenesten. Vennligst prøv igjen senere.',
+        isError: true
+      };
+    } finally {
+      setLoading(false);
+    }
   }
 
   const handleSendMessage = async (message: string) => {
@@ -244,7 +303,13 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
     const userMessage: Message = { id: Date.now().toString(), role: "user", content: message }
     setMessages((prev) => [...prev, userMessage])
     const response = await simulateResponse(message)
-    const aiMessage: Message = { id: (Date.now() + 1).toString(), role: "assistant", content: response, isAnimating: true }
+    const aiMessage: Message = { 
+      id: (Date.now() + 1).toString(), 
+      role: "assistant", 
+      content: response.content, 
+      isAnimating: true,
+      isError: response.isError
+    }
     setMessages((prev) => [...prev, aiMessage])
     setTimeout(() => {
       setMessages((prev) => prev.map((msg) => (msg.id === aiMessage.id ? { ...msg, isAnimating: false } : msg)))
@@ -277,7 +342,7 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
             {/* For desktop, it's just the first item in the sidebar flow */}
             <div className="md:p-2"> {/* Removed p-2 for mobile, keep for desktop. Mobile header in sidebar.tsx has p-2 */}
               <SidebarMenuButton asChild tooltip="Ny chat" className="md:w-full text-sm font-bold"> {/* md:w-full so it's auto-width on mobile */}
-                <a href="#"><span className="flex items-center gap-2"><MessageSquareText /><span>Ny chat</span></span></a>
+                <a href="/"><span className="flex items-center gap-2"><MessageSquareText /><span>Ny chat</span></span></a>
               </SidebarMenuButton>
             </div>
 
@@ -363,7 +428,9 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
                                 "max-w-[80%] rounded-2xl",
                                 message.role === "user"
                                   ? "bg-gray-200 text-gray-800 px-4 py-3 whitespace-pre-wrap"
-                                  : "bg-transparent text-gray-800 px-0 py-0",
+                                  : message.isError
+                                    ? "bg-red-50 border-2 border-red-500 text-gray-800 px-4 py-3 whitespace-pre-wrap"
+                                    : "bg-transparent text-gray-800 px-0 py-0",
                               )}
                             >
                               {message.role === "assistant" ? (
@@ -402,6 +469,7 @@ export default function HomePage() { // Renamed to HomePage to avoid conflict wi
               </div>
             </div>
 
+            
             {/* Fixed input area */}
             <AdjustableFixedContainer bottomOffsetClass="bottom-8" className="z-20">
               <div className="max-w-3xl mx-auto px-4 md:px-8">
