@@ -64,54 +64,55 @@ function useFadeIn(delay = 0) {
   };
 }
 
-// Custom hook for managing model selection with visual feedback
+// Custom hook for managing model selection - simplified version
 function useModelSelection(initialModel = "standard") {
   const [selectedModel, setSelectedModelState] = useState<string>(initialModel);
-  const [selectedModelName, setSelectedModelName] = useState<string>("");
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   
-  // Handle model selection with visual feedback
-  const setSelectedModel = (modelId: string, modelName: string) => {
+  // Models available for selection - defined once in the hook
+  const models = [
+    { id: "rask", name: "NorGPT: rask" },
+    { id: "standard", name: "NorGPT: standard" },
+    { id: "tenkende", name: "NorGPT: tenkende" },
+  ];
+  
+  // Handle model selection
+  const setSelectedModel = (modelId: string) => {
     setSelectedModelState(modelId);
-    setSelectedModelName(modelName);
-    setShowFeedback(true);
-    
-    // Keep dropdown open briefly to provide visual feedback
-    setTimeout(() => {
-      setIsOpen(false); // Close the dropdown after delay
-      
-      // Reset feedback after another delay
-      setTimeout(() => {
-        setShowFeedback(false);
-      }, 1000);
-    }, 600);
+    setDropdownOpen(false); // Close dropdown immediately after selection
   };
+
+  // Get the current model's full name
+  const currentModelName = models.find(model => model.id === selectedModel)?.name || models[1].name;
   
   return {
+    models,
     selectedModel,
-    selectedModelName,
-    showFeedback,
-    isOpen,
-    setIsOpen,
+    currentModelName,
+    dropdownOpen,
+    setDropdownOpen,
     setSelectedModel
   };
 }
 
 // Create a model context to share state between desktop and mobile model selectors
 const ModelContext = React.createContext<{
+  models: Array<{id: string, name: string}>;
   selectedModel: string;
-  selectedModelName: string;
-  showFeedback: boolean;
-  isOpen: boolean;
-  setIsOpen: (open: boolean) => void;
-  setSelectedModel: (modelId: string, modelName: string) => void;
+  currentModelName: string;
+  dropdownOpen: boolean;
+  setDropdownOpen: (open: boolean) => void;
+  setSelectedModel: (modelId: string) => void;
 }>({ 
+  models: [
+    { id: "rask", name: "NorGPT: rask" },
+    { id: "standard", name: "NorGPT: standard" },
+    { id: "tenkende", name: "NorGPT: tenkende" },
+  ],
   selectedModel: "standard", 
-  selectedModelName: "",
-  showFeedback: false,
-  isOpen: false,
-  setIsOpen: () => {},
+  currentModelName: "NorGPT: standard",
+  dropdownOpen: false,
+  setDropdownOpen: () => {},
   setSelectedModel: () => {} 
 });
 
@@ -217,13 +218,11 @@ const AdjustableFixedContainer: React.FC<AdjustableFixedContainerProps> = ({
 // New MobileTopBar component
 const MobileTopBar: React.FC = () => {
   const { isMobile } = useSidebar();
-  const fadeStyle = useFadeIn(300);
   const { 
+    models,
     selectedModel, 
-    selectedModelName,
-    showFeedback,
-    isOpen, 
-    setIsOpen,
+    dropdownOpen, 
+    setDropdownOpen,
     setSelectedModel 
   } = React.useContext(ModelContext);
   // State to prevent hydration mismatch
@@ -234,12 +233,8 @@ const MobileTopBar: React.FC = () => {
     setMounted(true);
   }, []);
   
-  // Models available for selection - shared constants
-  const models = [
-    { id: "rask", name: "NorGPT: rask" },
-    { id: "standard", name: "NorGPT: standard" },
-    { id: "tenkende", name: "NorGPT: tenkende" },
-  ];
+  // Simple style for the header
+  const headerStyle = { opacity: mounted ? 1 : 0, transition: 'opacity 0.3s ease-in-out' };
 
   if (!isMobile || !mounted) {
     return null; // Don't render on desktop or during SSR
@@ -249,7 +244,7 @@ const MobileTopBar: React.FC = () => {
     <div 
       className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between bg-background/80 px-4 backdrop-blur-sm md:hidden"
       style={{
-        ...fadeStyle,
+        ...headerStyle,
         // Remove border when selected/highlighted (transparent border color)
         outlineColor: 'transparent',
         borderBottom: '1px solid transparent',
@@ -260,63 +255,55 @@ const MobileTopBar: React.FC = () => {
         <SidebarTrigger />
       </div>
       
-      {/* Model Selection Dropdown - simplified for mobile with visual feedback */}
-      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-10 px-2 gap-1">
-            <ChevronDown className="h-4 w-4 mr-1" />
-            <span className="text-2xl font-semibold">NorGPT</span>
-            {showFeedback && (
-              <span 
-                className="ml-2 text-xs bg-primary/10 text-primary rounded-full px-2 py-1 transition-opacity"
-                style={{ opacity: showFeedback ? 1 : 0, transition: 'opacity 300ms ease-out' }}
+      {/* Model Selection Dropdown - simplified for mobile */}
+      <div className="relative z-50"> {/* Add higher z-index container */}
+        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-10 px-2 gap-1">
+              <ChevronDown className="h-4 w-4 mr-1" />
+              <span className="text-2xl font-semibold">NorGPT</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent 
+            className="z-50" 
+            sideOffset={4} 
+            align="end"
+            forceMount
+          >
+            {models.map(model => (
+              <DropdownMenuItem 
+                key={model.id} 
+                className={cn(
+                  "text-base",
+                  model.id === selectedModel && "bg-primary/10"
+                )}
+                onClick={() => setSelectedModel(model.id)}
               >
-                {selectedModelName.split(': ')[1]}
-              </span>
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent 
-          align="end"
-          className="transition-opacity duration-300"
-          style={{ opacity: isOpen ? 1 : 0 }}
-        >
-          {models.map(model => (
-            <DropdownMenuItem 
-              key={model.id} 
-              className={cn(
-                "text-base transition-colors duration-200",
-                model.id === selectedModel && "bg-primary/10"
-              )}
-              onClick={() => setSelectedModel(model.id, model.name)}
-            >
-              <span className="flex items-center">
-                <span className={cn(
-                  "w-4 h-4 mr-2 flex-shrink-0",
-                  model.id === selectedModel ? "opacity-100" : "opacity-0"
-                )}>
-                  {model.id === selectedModel && <Check className="h-4 w-4" />}
+                <span className="flex items-center">
+                  <span className="w-4 h-4 mr-2 flex-shrink-0">
+                    {model.id === selectedModel && <Check className="h-4 w-4" />}
+                  </span>
+                  {model.name}
                 </span>
-                {model.name}
-              </span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 };
 
 // Sidebar Controls component - Client-only with useEffect to prevent hydration mismatches
 const SidebarControls: React.FC = () => {
-  const { state } = useSidebar();
+  const { state, isMobile } = useSidebar();
   // State for tracking the selected model - from context
   const { 
+    models,
     selectedModel, 
-    selectedModelName, 
-    showFeedback, 
-    isOpen, 
-    setIsOpen, 
+    currentModelName,
+    dropdownOpen, 
+    setDropdownOpen, 
     setSelectedModel 
   } = React.useContext(ModelContext);
   // State to prevent hydration mismatch
@@ -328,18 +315,8 @@ const SidebarControls: React.FC = () => {
     setMounted(true);
   }, []);
   
-  // Models available for selection - shared constants
-  const models = [
-    { id: "rask", name: "NorGPT: rask" },
-    { id: "standard", name: "NorGPT: standard" },
-    { id: "tenkende", name: "NorGPT: tenkende" },
-  ];
-  
-  // Get the current model name for display
-  const currentModel = models.find(model => model.id === selectedModel)?.name || models[1].name;
-  
-  // Don't render anything during server-side rendering or initial hydration
-  if (!mounted) {
+  // Don't render anything during server-side rendering, initial hydration, or on mobile
+  if (!mounted || isMobile) {
     return null;
   }
   
@@ -379,40 +356,30 @@ const SidebarControls: React.FC = () => {
         </TooltipProvider>
       )}
       
-      {/* Model Selection Dropdown - with visual feedback */}
-      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      {/* Model Selection Dropdown - simplified */}
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger asChild>
           <Button 
             variant="ghost" 
             size="sm" 
-            className={cn(
-              "h-10 gap-1 px-3 transition-colors", 
-              showFeedback && "bg-primary/10"
-            )}
+            className="h-10 gap-1 px-3"
           >
-            <span className="text-base font-medium">{currentModel}</span>
+            <span className="text-base font-medium">{currentModelName}</span>
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent 
-          align="end"
-          className="transition-opacity duration-300"
-          style={{ opacity: isOpen ? 1 : 0 }}
-        >
+        <DropdownMenuContent align="end">
           {models.map(model => (
             <DropdownMenuItem 
               key={model.id} 
               className={cn(
-                "text-base transition-colors duration-200",
+                "text-base",
                 model.id === selectedModel && "bg-primary/10"
               )}
-              onClick={() => setSelectedModel(model.id, model.name)}
+              onClick={() => setSelectedModel(model.id)}
             >
               <span className="flex items-center">
-                <span className={cn(
-                  "w-4 h-4 mr-2 flex-shrink-0",
-                  model.id === selectedModel ? "opacity-100" : "opacity-0"
-                )}>
+                <span className="w-4 h-4 mr-2 flex-shrink-0">
                   {model.id === selectedModel && <Check className="h-4 w-4" />}
                 </span>
                 {model.name}
